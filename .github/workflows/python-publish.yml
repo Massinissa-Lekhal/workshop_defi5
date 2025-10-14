@@ -55,7 +55,7 @@ jobs:
         run: docker logs app || true
 
 
-    push_image:
+  push_image:
     runs-on: ubuntu-latest
     needs: [smoke_test]   # ou [sonar]
     if: ${{ github.ref == 'refs/heads/main' }}
