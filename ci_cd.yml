@@ -1,6 +1,6 @@
 
 
-name: CI/CD Python + Docker
+name: CI/CD PyTorch CNN
 
 on:
   push:
@@ -19,87 +19,31 @@ jobs:
           pip install flake8
           flake8 src tests
 
-  unit_tests:
+  tests:
     runs-on: ubuntu-latest
-    needs: [lint]
+    needs: lint
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: |
           pip install -r requirements.txt
-          pytest -q --cov=src --cov-report=xml:coverage.xml
+          pytest -q
 
-  non_regression:
+  docker_build:
     runs-on: ubuntu-latest
-    needs: [unit_tests]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: |
-          pip install -r requirements.txt
-          pytest -q -m e2e
-
-  build:
-    runs-on: ubuntu-latest
-    needs: [non_regression]
+    needs: tests
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image
-        run: docker build -t app:${{ github.sha }} .
+        run: docker build -t pytorch-cnn:${{ github.sha }} .
 
-  docker_smoke_test:
+  smoke_test:
     runs-on: ubuntu-latest
-    needs: [build]
+    needs: docker_build
     steps:
       - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build -t app:${{ github.sha }} .
-      - name: Run container
+      - name: Build and run container
         run: |
-          docker run -d -p 8000:8000 --name app app:${{ github.sha }}
-          sleep 4
-          curl -f http://localhost:8000/health
-      - name: Show logs if failed
-        if: failure()
-        run: docker logs app || true
-
-  sonar:
-    runs-on: ubuntu-latest
-    needs: [docker_smoke_test]
-    steps:
-      - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: |
-          pip install -r requirements.txt
-          pytest -q --cov=src --cov-report=xml:coverage.xml
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v2
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: [sonar]
-    if: ${{ github.ref == 'refs/heads/main' }}
-    steps:
-      - uses: actions/checkout@v4
-
-      # Push de l'image vers Docker Hub
-      - name: Login Docker Hub
-        env:
-          USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-        run: echo "$PASSWORD" | docker login -u "$USERNAME" --password-stdin
-
-      - name: Build & Push
-        env:
-          USERNAME: ${{ secrets.DOCKER_USERNAME }}
-        run: |
-          IMAGE=${USERNAME}/pyapp
-          docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
-          docker push $IMAGE:${{ github.sha }}
-          docker push $IMAGE:latest
+          docker build -t pytorch-cnn:${{ github.sha }} .
+          docker run --rm pytorch-cnn:${{ github.sha }}
