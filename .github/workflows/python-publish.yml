@@ -1,5 +1,4 @@
-
-name: CI/CD Python + Docker
+name: CI/CD PyTorch CNN
 
 on:
   push:
@@ -27,50 +26,31 @@ jobs:
         with: { python-version: "3.12" }
       - run: |
           pip install -r requirements.txt
-          pip install pytest pytest-cov
-          pytest -q --cov=src --cov-report=xml:coverage.xml
+          pytest -q
 
-  build:
+  docker_build:
     runs-on: ubuntu-latest
     needs: tests
     steps:
       - uses: actions/checkout@v4
       - name: Build Docker image
-        run: docker build -t app:${{ github.sha }} .
+        run: docker build -t pytorch-cnn:${{ github.sha }} .
 
   smoke_test:
     runs-on: ubuntu-latest
-    needs: build
+    needs: docker_build
     steps:
       - uses: actions/checkout@v4
-      - name: Build image (cache local)
-        run: docker build -t app:${{ github.sha }} .
-      - name: Run container (smoke test)
-        run: |
-          docker run -d -p 8000:8000 --name app app:${{ github.sha }}
-          sleep 4
-          curl -f http://127.0.0.1:8000/health
+
+      - name: Build image
+        run: docker build -t pytorch-cnn:${{ github.sha }} .
+
+      - name: Run container (pytest inside container)
+        run: docker run --rm --name cnn pytorch-cnn:${{ github.sha }}
+
       - name: Show logs if failed
         if: failure()
-        run: docker logs app || true
-
-
-  push_image:
-    runs-on: ubuntu-latest
-    needs: [smoke_test]   # ou [sonar]
-    if: ${{ github.ref == 'refs/heads/main' }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build & Push image
         run: |
-          IMAGE=${{ secrets.DOCKER_USERNAME }}/pyapp
-          docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
-          docker push $IMAGE:${{ github.sha }}
-          docker push $IMAGE:latest
+          docker ps -a || true
+          docker logs cnn || true
+
