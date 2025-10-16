@@ -39,11 +39,19 @@ jobs:
         run: docker build -t pytorch-cnn:${{ github.sha }} .
 
   smoke_test:
-    runs-on: ubuntu-latest
-    needs: docker_build
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build and run container
-        run: |
-          docker build -t pytorch-cnn:${{ github.sha }} .
-          docker run --rm pytorch-cnn:${{ github.sha }}
+  runs-on: ubuntu-latest
+  needs: docker_build
+  steps:
+    - uses: actions/checkout@v4
+
+    - name: Build image
+    run: docker build -t pytorch-cnn:${{ github.sha }} .
+
+    # Si ton Dockerfile a CMD ["pytest","-q"] :
+    - name: Run container (tests inside container)
+      run: docker run --rm --name cnn pytorch-cnn:${{ github.sha }}
+
+    # Sinon, si ton Dockerfile ne lance rien, force pytest :
+    # - name: Run tests inside container
+    #   run: docker run --rm --name cnn pytorch-cnn:${{ github.sha }} pytest -q
+
